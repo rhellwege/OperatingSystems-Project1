@@ -62,6 +62,7 @@ void computeHash(const string& hashProgName)
 		perror("read");
 		exit(-1);
 	}
+	fprintf(stderr, "received <%s> from parent\n", fileNameRecv);
 	
 	/* Glue together a command line <PROGRAM NAME>. 
  	 * For example, sha512sum fileName.
@@ -69,6 +70,7 @@ void computeHash(const string& hashProgName)
 	string cmdLine(hashProgName);
 	cmdLine += " ";
 	cmdLine += fileNameRecv;	
+	fprintf(stderr, "Attempting to run program <%s>\n", cmdLine.c_str());
 	
     /* TODO: Open the pipe to the program (specified in cmdLine) 
 	* using popen() and save the ouput into hashValue. See popen.cpp
@@ -159,9 +161,18 @@ void parentFunc(const string& hashProgName)
 	 .
 	 .
 	 */
-	if (write(parentToChildPipe[WRITE_END], hashProgName.c_str(), hashProgName.length()) < 0)
+	// send the file name to the child
+	// filename is a global variable
+	if (write(parentToChildPipe[WRITE_END], fileName.c_str(), fileName.length()) < 0)
 	{
 		perror("could not send message from parent to child.");
+		exit(-1);
+	}
+
+	// we are done writing to the child
+	if (close(parentToChildPipe[WRITE_END]) < 0) 
+	{
+		perror("could not close parent -> child write end from child");
 		exit(-1);
 	}
 
@@ -172,9 +183,16 @@ void parentFunc(const string& hashProgName)
 	*/
 
 	// get the output of the hash program from the child -> parent read pipe
-	if(fread(hashValue, sizeof(char), sizeof(char) * HASH_VALUE_LENGTH, childToParentPipe[READ_END]) < 0)
+	if(read(childToParentPipe[READ_END], hashValue, HASH_VALUE_LENGTH) < 0)
 	{
 		perror("could not read message from child to parent.");
+		exit(-1);
+	}
+
+	// we are done reading from the child
+	if (close(childToParentPipe[READ_END]) < 0) 
+	{
+		perror("could not close child -> parent read end from child");
 		exit(-1);
 	}
 
