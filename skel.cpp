@@ -56,6 +56,12 @@ void computeHash(const string& hashProgName)
 	
 	
 	/** TODO: Now, lets read a message from the parent **/
+	/* get the filename to hash from the parent via the parent -> child read pipe */
+	if (read(parentToChildPipe[READ_END], fileNameRecv, sizeof(fileNameRecv)) < 0)
+	{
+		perror("read");
+		exit(-1);
+	}
 	
 	/* Glue together a command line <PROGRAM NAME>. 
  	 * For example, sha512sum fileName.
@@ -72,13 +78,49 @@ void computeHash(const string& hashProgName)
 	.
 	*/
 		
+	// spawn the process and obtain the fd to read from
+	FILE* progOutput = popen(cmdLine.c_str(), "r");
+
+	/* Make sure that popen succeeded */
+	if(!progOutput)
+	{
+		perror("popen");
+		exit(-1);
+	}
+
+	// get the output of the hash program
+	if(fread(hashValue, sizeof(char), sizeof(char) * HASH_VALUE_LENGTH, progOutput) < 0)
+	{
+		perror("fread");
+		exit(-1);
+	}
 	
+	/* Close the file pointer representing the program output */
+	if(pclose(progOutput) < 0)
+	{
+		perror("close hashprogram");
+		exit(-1);
+	}
 		
 	/* TODO: Send a string to the parent 
  	 .
 	 .
 	 .
 	*/
+	if (write(childToParentPipe[WRITE_END], hashValue, HASH_VALUE_LENGTH) < 0)
+	{
+		
+		perror("write to parent");
+		exit(-1);
+	}
+
+	// we no longer need to send messages to parent, close the write pipe.
+	if (close(childToParentPipe[WRITE_END]) < 0)
+	{
+		perror("close child -> parent write pipe");
+		exit(-1);
+
+	}
 
 	/* The child terminates */
 	exit(0);
@@ -137,7 +179,22 @@ int main(int argc, char** argv)
 	for (int hashAlgNum = 0; hashAlgNum < HASH_PROG_ARRAY_SIZE; ++hashAlgNum)
 	{
 
-		/** TODO: create two pipes **/
+		/** TODO: create two pipes COMPLETE **/
+		/* Create a parent-to-child pipe */
+		if(pipe(parentToChildPipe) < 0)
+		{
+			perror("could not create p-c pipe");
+			exit(-1);
+		}
+
+
+		/* Create a child-to-parent pipe */
+		if(pipe(childToParentPipe) < 0)
+		{
+			perror("could not create c-p pipe");
+			exit(-1);
+
+		}
 
 		/* Fork a child process and save the id */
 		if ((pid = fork()) < 0)
@@ -150,6 +207,20 @@ int main(int argc, char** argv)
 
 		{
 			/** TODO: close the unused ends of two pipes **/
+
+			/* Close the parent -> child write pipe */
+			if (close(parentToChildPipe[WRITE_END]) < 0) 
+			{
+				perror("could not close parent -> child write end from child");
+				exit(-1);
+			}
+
+			/* Close the read-end of the child-to-parent pipe */
+			if(close(childToParentPipe[READ_END]) < 0)
+			{
+				perror("close");
+				exit(-1);
+			}
 
 			/* Compute the hash */
 			computeHash(hashProgs[hashAlgNum]);
