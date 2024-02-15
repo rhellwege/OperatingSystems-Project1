@@ -133,6 +133,19 @@ void parentFunc(const string& hashProgName)
 	/* I am the parent */
 
 	/** TODO: close the unused ends of two pipes. **/
+	/* Close the parent -> child read pipe */
+	if (close(parentToChildPipe[READ_END]) < 0) 
+	{
+		perror("could not close parent -> child read end from child");
+		exit(-1);
+	}
+
+	/* Close the read-end of the child-to-parent pipe */
+	if(close(childToParentPipe[WRITE_END]) < 0)
+	{
+		perror("close");
+		exit(-1);
+	}
 
 	/* The buffer to hold the string received from the child */
 	char hashValue[HASH_VALUE_LENGTH];
@@ -146,16 +159,28 @@ void parentFunc(const string& hashProgName)
 	 .
 	 .
 	 */
+	if (write(parentToChildPipe[WRITE_END], hashProgName.c_str(), hashProgName.length()) < 0)
+	{
+		perror("could not send message from parent to child.");
+		exit(-1);
+	}
 
-	 /* TODO: Read the string sent by the child
-	  .
-	  .
-	  .
-	  */
+	/* TODO: Read the string sent by the child
+	.
+	.
+	.
+	*/
 
-	  /* Print the hash value */
-	  fprintf(stdout, "%s HASH VALUE: %s\n", hashProgName.c_str(), hashValue);
-	  fflush(stdout);
+	// get the output of the hash program from the child -> parent read pipe
+	if(fread(hashValue, sizeof(char), sizeof(char) * HASH_VALUE_LENGTH, childToParentPipe[READ_END]) < 0)
+	{
+		perror("could not read message from child to parent.");
+		exit(-1);
+	}
+
+	/* Print the hash value */
+	fprintf(stdout, "%s HASH VALUE: %s\n", hashProgName.c_str(), hashValue);
+	fflush(stdout);
 
 }
 
